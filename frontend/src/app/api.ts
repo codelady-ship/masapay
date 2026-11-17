@@ -7,6 +7,8 @@ import {
 } from '@reduxjs/toolkit/query/react'
 import { loggedOut, tokenReceived } from '@/features/auth/auth-slice'
 import type { AuthState } from '@/features/auth/auth-slice'
+import { DEMO } from '@/demo/demo-mode'
+import { demoBaseQuery } from '@/demo/mock-backend'
 
 // Single RTK Query API for the whole app. Feature slices add their endpoints
 // with `api.injectEndpoints` so each feature owns its own requests.
@@ -79,7 +81,8 @@ const baseQueryWithReauth: BaseQueryFn<
 
 export const api = createApi({
   reducerPath: 'api',
-  baseQuery: baseQueryWithReauth,
+  // The static demo build answers from in-browser data instead of the backend.
+  baseQuery: DEMO ? demoBaseQuery : baseQueryWithReauth,
   tagTypes: [
     'TableOrder',
     'Me',

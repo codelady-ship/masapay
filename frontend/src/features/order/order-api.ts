@@ -1,5 +1,6 @@
 import { api } from '@/app/api'
 import { subscribeToTopic } from '@/lib/stomp'
+import { DEMO } from '@/demo/demo-mode'
 import type {
   Order,
   OrderItem,
@@ -137,6 +138,8 @@ export const orderApi = api.injectEndpoints({
         qrToken,
         { updateCachedData, cacheDataLoaded, cacheEntryRemoved, dispatch },
       ) {
+        // The static demo has no backend to push live updates.
+        if (DEMO) return
         try {
           await cacheDataLoaded
         } catch {
