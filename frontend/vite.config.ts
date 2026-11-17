@@ -9,6 +9,8 @@ const BACKEND_URL = process.env.VITE_BACKEND_URL ?? 'http://localhost:8080'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // "/" normally; the GitHub Pages demo build is served from "/masapay/".
+  base: process.env.VITE_BASE ?? '/',
   plugins: [react()],
   resolve: {
     alias: {

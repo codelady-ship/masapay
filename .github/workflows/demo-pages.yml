@@ -1,0 +1,54 @@
+# Static demo on GitHub Pages: the customer screen (landing page and one demo
+# table) built with VITE_DEMO=true, so it runs on made-up data in the browser.
+# No backend, no Payriff, no real payments. Published at
+# https://codelady-ship.github.io/masapay/ after a push to main.
+name: Demo (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Build demo
+        run: npm run build
+        env:
+          VITE_DEMO: 'true'
+          VITE_BASE: /masapay/
+      # Pages has no SPA rewrites: serve the app for deep links too.
+      - run: cp dist/index.html dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
