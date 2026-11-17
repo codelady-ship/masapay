@@ -118,6 +118,8 @@ interface DemoState {
   lines: Line[]
   paidAmount: number
   equalSplit: { totalParts: number; paidParts: number } | null
+  /** The amount an equal split divides, fixed by its first payment. */
+  equalBase: number
   payments: Payment[]
   nextId: number
 }
@@ -148,6 +150,7 @@ function initialState(): DemoState {
     ],
     paidAmount: 0,
     equalSplit: null,
+    equalBase: 0,
     payments: [],
     nextId: 5,
   }
@@ -212,14 +215,45 @@ function toDto(s: DemoState): TableOrderDto {
   }
 }
 
+/** What the first {@code paid} of {@code parts} equal shares of {@code base} add up to. */
+const cumulativeShare = (base: number, parts: number, paid: number) =>
+  round2((base * paid) / parts)
+
+/**
+ * Same rule as the backend's PaymentSettlementService.planEqualShares: the first
+ * equal payment fixes the part count and the amount being split (the outstanding
+ * balance at that moment, so earlier item payments are left out). Until a part
+ * is paid the split can restart with another part count. The final share pays
+ * the exact outstanding balance, absorbing any rounding difference.
+ */
 function equalShare(s: DemoState, parts: number, partsToPay: number) {
-  const split = s.equalSplit ?? { totalParts: parts, paidParts: 0 }
-  const left = split.totalParts - split.paidParts
-  const pay = Math.min(partsToPay, left)
-  // The last parts take whatever is left, so rounding never leaves a qəpik.
+  const left = outstanding(s)
+  const locked = s.equalSplit && s.equalSplit.paidParts > 0
+  if (locked && s.equalSplit!.totalParts !== parts) return null
+  const paidBefore = locked ? s.equalSplit!.paidParts : 0
+  const base = locked ? s.equalBase : left
+  if (left <= 0 || partsToPay < 1 || partsToPay > parts - paidBefore) {
+    return null
+  }
+  const paidAfter = paidBefore + partsToPay
   const amount =
-    pay >= left ? outstanding(s) : round2((total(s) / split.totalParts) * pay)
-  return { amount, split, pay }
+    paidAfter === parts
+      ? left
+      : Math.min(
+          left,
+          round2(
+            cumulativeShare(base, parts, paidAfter) -
+              cumulativeShare(base, parts, paidBefore),
+          ),
+        )
+  return { amount, base, paidBefore, paidAfter }
+}
+
+const conflict = {
+  error: {
+    status: 409,
+    data: { message: 'The bill split was just updated' },
+  } as FetchBaseQueryError,
 }
 
 function checkout(s: DemoState, amount: number, tip: number | null) {
@@ -305,31 +339,25 @@ function handle(
       return { data: checkout(s, amount, tip) }
     }
     case 'GET /payment/equal': {
-      const { amount, split } = equalShare(
-        s,
-        Number(query.get('parts')),
-        Number(query.get('partsToPay')),
-      )
+      const parts = Number(query.get('parts'))
+      const plan = equalShare(s, parts, Number(query.get('partsToPay') ?? 1))
+      if (!plan) return conflict
       return {
         data: {
-          amount,
+          amount: plan.amount,
           currency: CURRENCY,
-          totalParts: split.totalParts,
-          paidParts: split.paidParts,
+          totalParts: parts,
+          paidParts: plan.paidBefore,
         },
       }
     }
     case 'POST /payment/equal/checkout': {
-      const { amount, split, pay } = equalShare(
-        s,
-        Number(body?.parts),
-        Number(body?.partsToPay),
-      )
-      s.equalSplit = {
-        totalParts: split.totalParts,
-        paidParts: split.paidParts + pay,
-      }
-      return { data: checkout(s, amount, tip) }
+      const parts = Number(body?.parts)
+      const plan = equalShare(s, parts, Number(body?.partsToPay))
+      if (!plan) return conflict
+      s.equalSplit = { totalParts: parts, paidParts: plan.paidAfter }
+      s.equalBase = plan.base
+      return { data: checkout(s, plan.amount, tip) }
     }
     case 'GET /payment/items': {
       const ids = query.getAll('itemIds')

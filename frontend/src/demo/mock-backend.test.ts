@@ -67,6 +67,29 @@ describe('demoBaseQuery', () => {
     expect(order.order?.outstanding).toBe(0)
   })
 
+  it('splits what is left after an item payment, like the backend', async () => {
+    const before = (await call(`${base}/order`)).data as TableOrderDto
+    await call({
+      url: `${base}/payment/items/checkout`,
+      method: 'POST',
+      body: { itemIds: ['line-2'], tipAmount: null },
+    })
+    const left = before.order!.totalAmount - 18
+    const quote = (await call(`${base}/payment/equal?parts=2&partsToPay=1`))
+      .data as { amount: number }
+    expect(quote.amount).toBeCloseTo(left / 2)
+  })
+
+  it('refuses another part count once a share is paid', async () => {
+    await call({
+      url: `${base}/payment/equal/checkout`,
+      method: 'POST',
+      body: { parts: 3, partsToPay: 1, tipAmount: null },
+    })
+    const result = await call(`${base}/payment/equal?parts=2&partsToPay=1`)
+    expect(result.error?.status).toBe(409)
+  })
+
   it('answers 404 for an unknown table token', async () => {
     const result = await call('/public/tables/other/order')
     expect(result.error?.status).toBe(404)
