@@ -1,0 +1,7 @@
+# Test-only settings, layered on top of src/main/resources/application.yml (Spring Boot reads
+# classpath:/config/ after the classpath root). Never packaged into the application jar.
+masapay:
+  jwt:
+    # application.yml has no default for MASAPAY_JWT_SECRET, so Spring Boot tests set one here.
+    # Public test value; it only signs tokens inside the test JVM.
+    secret: masapay-test-only-jwt-secret-0123456789-abcdefghij

@@ -68,8 +68,8 @@ masapay:
       # enabled user by email without Google. Never set this in a deployed environment.
       enabled: ${MASAPAY_DEV_LOGIN_ENABLED:false}
   security:
-    # LOCAL DEVELOPMENT ONLY. Lets the app start with the public default JWT and webhook
-    # secrets below. Off by default, so a deployment that forgets to set them fails at startup
+    # LOCAL DEVELOPMENT ONLY. Lets the app start with the public default webhook secret below
+    # (MASAPAY_JWT_SECRET has no default and is always required). Off by default, so a deployment that forgets to set them fails at startup
     # instead of accepting forged tokens. Dev login implies it.
     allow-dev-secrets: ${MASAPAY_ALLOW_DEV_SECRETS:${MASAPAY_DEV_LOGIN_ENABLED:false}}
   secrets:
@@ -100,8 +100,10 @@ masapay:
     # Enables the customer-facing order endpoints; disabled in the infra-free smoke test.
     enabled: ${MASAPAY_ORDERS_ENABLED:true}
   jwt:
-    # HMAC-SHA256 signing secret (>= 32 bytes). Override per environment; never ship the default.
-    secret: ${MASAPAY_JWT_SECRET:masapay-dev-secret-change-me-0123456789-abcdefghij}
+    # HMAC-SHA256 signing secret (>= 32 bytes, `openssl rand -base64 48`). Required in every
+    # environment, local development included: there is no default, so the app does not start
+    # without MASAPAY_JWT_SECRET. Tests set their own value in src/test/resources/config.
+    secret: ${MASAPAY_JWT_SECRET}
     issuer: ${MASAPAY_JWT_ISSUER:masapay}
     access-token-ttl: ${MASAPAY_JWT_ACCESS_TTL:PT15M}
     refresh-token-ttl: ${MASAPAY_JWT_REFRESH_TTL:P7D}
