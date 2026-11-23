@@ -5,6 +5,78 @@ Müştəri masadakı QR kodu skan edir, canlı adisyonu görür, hesabı bölür
 əlavə edir və Payriff vasitəsilə ödəyir; sistem restoranın POS-u (iiko / Micros /
 Custom) ilə iki-tərəfli sinxronlaşır.
 
+**Live demo:** https://codelady-ship.github.io/masapay/
+
+The demo is a static build of the customer screen (landing page and one demo
+table, `VITE_DEMO=true`): it runs on made-up data in the browser, with no backend
+and no real payments. Open a table straight away:
+[Masa 7 demo](https://codelady-ship.github.io/masapay/r/demo-restoran/t/masa-7?token=00000000-0000-4000-8000-000000000001).
+
+## Screenshots
+
+| Landing page (1440px) | Demo table (390px) |
+|---|---|
+| ![masapay landing page](docs/screenshots/landing-desktop.png) | ![masapay demo table on a phone](docs/screenshots/table-mobile.png) |
+
+| Demo table (1440px) | Landing page (390px) |
+|---|---|
+| ![masapay demo table on desktop](docs/screenshots/table-desktop.png) | ![masapay landing page on a phone](docs/screenshots/landing-mobile.png) |
+
+Taken with Playwright from the live demo above.
+
+## Tech stack
+
+- **Frontend:** React 18, Vite, TypeScript (strict), TailwindCSS, shadcn/ui,
+  lucide-react, Redux Toolkit + RTK Query, Vitest + React Testing Library.
+- **Backend:** Java 21, Spring Boot 3.x, PostgreSQL 16 + Flyway, Redis, Spring
+  Security (Google OAuth2 + JWT), WebSocket STOMP, JUnit 5 + Testcontainers.
+- **Integrations:** Payriff API (payments, refunds, signed webhooks), iiko Cloud
+  POS adapter.
+- **DevOps:** Docker, Docker Compose, GitHub Actions (CI and the GitHub Pages demo).
+
+## Team & my role
+
+This is a team project; this repository is a fork of
+[ismetcahangirov/masapay](https://github.com/ismetcahangirov/masapay). The team, as
+it appears in the git history and in [CLAUDE.md](./CLAUDE.md) (work split):
+
+| Contributor | Non-merge commits | Active (commit dates) | Work split in CLAUDE.md |
+|---|---|---|---|
+| [@codelady-ship](https://github.com/codelady-ship) (Antiqa) | 267 of 370 | 2026-10-11 to 2026-11-17 | FullStack issues |
+| [@ismetcahangirov](https://github.com/ismetcahangirov) | 74 | 2026-07-22 to 2026-10-22 | FullStack issues |
+| [@YunisPashayev](https://github.com/YunisPashayev) | 29 | 2026-07-24 | Backend issues |
+
+What I (Antiqa) built, taken from my commits (issue numbers in brackets):
+
+- **Payments:** Payriff v3 client, checkout with HMAC-signed callback URLs, idempotent
+  webhook, refunds (#33-#37); pay the whole bill, split equally, or pay only your own
+  items, with the service charge shared correctly (#24-#26); tips on any checkout (#181).
+- **POS integration:** the POS adapter contract and the iiko Cloud adapter (fetching
+  orders, booking the payment and closing the bill) (#39-#41).
+- **Real-time:** live bill and live floor over STOMP with reconnect and catch-up (#21, #44).
+- **Auth:** Google login, refresh token in an httpOnly cookie with rotation, a
+  local-only dev login (#17).
+- **Admin panel:** dashboard KPIs and revenue chart (#43), transactions with refund
+  (#45), tip reports with CSV and Excel export (#48, #170), tables with QR codes (#47),
+  settings (#46), menu, combos and daily menu (#137-#139), kitchen and waiter screens
+  (#142-#144), staff management (#145), restaurants, subscriptions and platform
+  analytics for the super admin (#147-#149), collapsible sidebar (#184).
+- **Customer ordering:** menu and order card, upsell extras, order cancellation,
+  kitchen status per dish (#140, #141, #178, #180, #183, #185, #186).
+- **Security:** startup guard against default secrets, rate limits per IP and per user
+  backed by Redis, AES-256-GCM encryption of restaurant secrets with key rotation
+  (#156-#158).
+- **Quality and delivery:** GitHub Actions CI (#51), JaCoCo gate and Testcontainers
+  persistence test (#52), Vitest setup (#53), Docker Compose stack (#50), production
+  deployment docs (#54), the GitHub Pages demo. I also merged most of the team's pull
+  requests (70 merge commits).
+
+From the git history, the brand (Masapay Sans typeface, penguin logo), the design
+guide and the landing page were mainly the work of @ismetcahangirov.
+
+<!-- TODO(owner): confirm the team list and the line above; add anything the git
+history does not show (product decisions, design, reviews, who led the project). -->
+
 ## Mündəricat
 
 - [Monorepo strukturu](#monorepo-strukturu)
@@ -57,6 +129,7 @@ Tələblər:
 ### A yolu: Docker Compose ilə hər şey bir əmrlə
 
 ```bash
+export MASAPAY_JWT_SECRET=$(openssl rand -base64 48)   # tələb olunur, default yoxdur
 docker compose up -d --build
 ```
 
@@ -64,7 +137,9 @@ docker compose up -d --build
 - Backend: http://localhost:8080
 - PostgreSQL host-da `5433`, Redis `6379` portundadır.
 
-Compose lokal üçündür: açıq dev secret-lərə icazə verir (`MASAPAY_ALLOW_DEV_SECRETS=true`).
+Compose lokal üçündür: açıq dev webhook secret-inə icazə verir (`MASAPAY_ALLOW_DEV_SECRETS=true`).
+`MASAPAY_JWT_SECRET` isə heç bir mühitdə default-a malik deyil: təyin olunmayıbsa
+`docker compose up` başlamır (onu shell-də export et və ya izlənməyən `.env` faylına yaz).
 Production üçün aşağıdakı [Production deployment](#production-deployment) bölməsinə bax.
 
 ### B yolu: Docker-siz (PostgreSQL maşında)
@@ -79,12 +154,14 @@ Production üçün aşağıdakı [Production deployment](#production-deployment)
 
    ```bash
    cd backend
+   export MASAPAY_JWT_SECRET=$(openssl rand -base64 48)   # tələb olunur, default yoxdur
    MASAPAY_REDIS_ENABLED=false MASAPAY_DEV_LOGIN_ENABLED=true MASAPAY_PAYRIFF_MOCK=true ./gradlew bootRun
    ```
 
    PowerShell:
 
    ```powershell
+   $env:MASAPAY_JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
    $env:MASAPAY_REDIS_ENABLED="false"; $env:MASAPAY_DEV_LOGIN_ENABLED="true"; $env:MASAPAY_PAYRIFF_MOCK="true"
    .\gradlew.bat bootRun
    ```
@@ -152,7 +229,7 @@ hər birini eyni adlı environment dəyişəni əvəz edir. Production üçün v
 
 | Dəyişən | Nə üçün | Necə yaradılır |
 |---|---|---|
-| `MASAPAY_JWT_SECRET` | access / refresh token imzası | `openssl rand -base64 48` |
+| `MASAPAY_JWT_SECRET` | access / refresh token imzası; default yoxdur, lokalda da tələb olunur | `openssl rand -base64 48` |
 | `MASAPAY_PAYRIFF_WEBHOOK_SECRET` | Payriff callback-in həqiqiliyi | `openssl rand -base64 48` |
 | `MASAPAY_SECRETS_ENCRYPTION_KEY` | restoranların Payriff / iiko açarlarının DB-də şifrələnməsi (AES-256-GCM) | `openssl rand -base64 32` |
 | `SPRING_DATASOURCE_URL` | PostgreSQL ünvanı | `jdbc:postgresql://<host>:5432/masapay` |
