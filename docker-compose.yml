@@ -45,6 +45,9 @@ services:
       # MASAPAY_JWT_SECRET, MASAPAY_PAYRIFF_WEBHOOK_SECRET and MASAPAY_SECRETS_ENCRYPTION_KEY and
       # leaves this false, otherwise the backend refuses to start.
       MASAPAY_ALLOW_DEV_SECRETS: ${MASAPAY_ALLOW_DEV_SECRETS:-true}
+      # No default JWT secret, not even locally: export one before `docker compose up`
+      # (`export MASAPAY_JWT_SECRET=$(openssl rand -base64 48)`) or put it in an untracked .env.
+      MASAPAY_JWT_SECRET: ${MASAPAY_JWT_SECRET:?Set MASAPAY_JWT_SECRET, e.g. openssl rand -base64 48}
     ports:
       - "8080:8080"
     depends_on:
